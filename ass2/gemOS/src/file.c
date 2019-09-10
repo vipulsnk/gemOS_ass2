@@ -103,8 +103,19 @@ long generic_close(struct file *filep)
    * Incase of Error return valid Error code 
    * 
    */
+  int l;
+    if(filep->type == REGULAR){
+      // regular file
+      if(filep->ref_count==1){ //this is the only file pointer, structure must be freed
+        filep->inode->ref_count--;   // one structure decreased
+        free_file_object(filep);
+      }else{  // some other file pointers point to the same file structure
+        filep->ref_count--;
+        
+      }
+    }
     int ret_fd = -EINVAL; 
-    return ret_fd;
+    return 1;
 }
 
 static int do_read_regular(struct file *filep, char * buff, u32 count)
@@ -144,6 +155,12 @@ static long do_lseek_regular(struct file *filep, long offset, int whence)
     *   Set, Adjust the ofset based on the whence
     *   Incase of Error return valid Error code 
     * */
+    // if(!filep){
+    //   // no filep
+    //   return -EINVAL;
+    // }else{
+
+    // }
     int ret_fd = -EINVAL; 
     return ret_fd;
 }
@@ -168,43 +185,46 @@ extern int do_regular_file_open(struct exec_context *ctx, char* filename, u64 fl
     int fd=i;
 
 
-    // s3: allocating a file object 
-    struct file * filep = alloc_file();
-
+    
+    
+    struct inode * inode1;
     if((flags & O_CREAT) == O_CREAT){
       // create a new file
       //printf("creating a new file\n");
       // s1: get inode
-      struct inode * inode1 = create_inode(filename, mode);
+      inode1 = create_inode(filename, mode);
       inode1->ref_count=1;
-      filep->inode = inode1;
+      
     }else{
       // open an existing file
       // s1: look for the inode
       //printf("opening an existing file\n");
-      struct inode* inode2 = lookup_inode(filename);
-      if(inode2==NULL){
+      inode1 = lookup_inode(filename);
+      if(inode1==NULL){
         // error occured
         //printf("error occured in opening file, inode is NULL\n");
         return -EINVAL; // return appropriate exit code 
       }else{
         // assuming no error
         u32 mode_inode;
-        mode_inode = inode2->mode; // may be an error if mode is not assigned in inode
+        mode_inode = inode1->mode; // may be an error if mode is not assigned in inode
         // checking permissions
         if ((((flags & O_READ) == O_READ) && ((mode_inode & O_READ) != O_READ)) || (((flags & O_WRITE) == O_WRITE) && ((mode_inode & O_WRITE) != O_WRITE)) || (((flags & O_EXEC) == O_EXEC) && ((mode_inode & O_EXEC) != O_EXEC) )) {
           // permission denied
           return -EACCES;
         }else{
           //printf("correct permissions, good to go\n");
-          filep->inode = inode2;
-          inode2->ref_count=inode2->ref_count+1; // new struct object created
+          // filep->inode = inode2;
+          inode1->ref_count++; // new struct object created
         }
       }
       
     }
     // assuming no error
+    // s3: allocating a file object 
+    struct file * filep = alloc_file();
     // s4: filling the fields
+    filep->inode = inode1;
     filep->pipe = NULL;
     filep->mode = flags; // assigning mode of opening :: ERROR mode = flags - OCREAT
     filep->type = REGULAR;
@@ -229,7 +249,7 @@ int fd_dup(struct exec_context *current, int oldfd)
      int ret_fd; 
      if(filep){
         // s2: find free fd
-        int i=3; // looking from index 3
+        int i=0; // looking from index 3
         while(current->files[i]){
           i++;
           //printf("looking for free fd, ind is %d\n", i);
@@ -254,6 +274,20 @@ int fd_dup2(struct exec_context *current, int oldfd, int newfd)
     *  return the file descriptor,
     *  Incase of Error return valid Error code 
     * */
-    int ret_fd = -EINVAL; 
+    if(!(current->files[oldfd])){
+      return -EINVAL;
+    }
+    int fd;
+    int ret_fd;
+    struct file * filep = current->files[newfd];
+    if(filep){
+      long l = generic_close(filep);
+      current->files[newfd]=NULL;
+    }
+    if(oldfd==newfd){
+      ret_fd=oldfd;
+    }else{
+      ret_fd = fd_dup(current, oldfd); // may also return for errors
+    }   
     return ret_fd;
 }
