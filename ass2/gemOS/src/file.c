@@ -149,7 +149,61 @@ extern int do_regular_file_open(struct exec_context *ctx, char* filename, u64 fl
     *  Validate file existence, Max File count is 32, Max Size is 4KB, etc
     *  Incase of Error return valid Error code 
     * */
-    int ret_fd = -EINVAL; 
+
+    // s2: find free fd
+    int i=3; // looking from index 3
+    while(ctx->files[i]){
+      i++;
+      printf("looking for free fd, ind is %d\n", i);
+    }
+    printf("free fd found: %d\n", i);
+    int fd=i;
+
+
+    // s3: allocating a file object 
+    struct file * filep = alloc_file();
+
+    if((flags & O_CREAT) == O_CREAT){
+      // create a new file
+      printf("creating a new file\n");
+      // s1: get inode
+      struct inode * inode1 = create_inode(filename, mode);
+      filep->inode = inode1;
+    }else{
+      // open an existing file
+      // s1: look for the inode
+      printf("opening an existing file\n");
+      struct inode* inode2 = lookup_inode(filename);
+      if(inode2==NULL){
+        // error occured
+        printf("error occured in opening file, inode is NULL\n");
+        return -EINVAL; // return appropriate exit code 
+      }else{
+        // assuming no error
+        u32 mode_inode;
+        mode_inode = inode2->mode; // may be an error if mode is not assigned in inode
+        // checking permissions
+        if(((mode & O_READ) == (mode_inode & O_READ)) && ((mode & O_WRITE) == (mode_inode & O_WRITE)) && ((mode & O_EXEC) == (mode_inode & O_EXEC))){
+          printf("correct permissions, good to go\n");
+          filep->inode = inode2;
+          inode2->ref_count=inode2->ref_count++; // new struct object created
+        }else{
+          printf("permissions different\n");
+          return -EACCES;
+        }
+      }
+      
+    }
+    // assuming no error
+    // s4: filling the fields
+    filep->pipe = NULL;
+    filep->type = REGULAR;
+    filep->mode = mode;
+    filep->fops->read = do_read_regular;
+    filep->fops->write = do_write_regular;
+    filep->fops->close = generic_close;
+    ctx->files[fd] = filep;
+    int ret_fd = fd; 
     return ret_fd;
 }
 
