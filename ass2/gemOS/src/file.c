@@ -176,6 +176,7 @@ extern int do_regular_file_open(struct exec_context *ctx, char* filename, u64 fl
       //printf("creating a new file\n");
       // s1: get inode
       struct inode * inode1 = create_inode(filename, mode);
+      inode1->ref_count=1;
       filep->inode = inode1;
     }else{
       // open an existing file
@@ -197,7 +198,7 @@ extern int do_regular_file_open(struct exec_context *ctx, char* filename, u64 fl
         }else{
           //printf("correct permissions, good to go\n");
           filep->inode = inode2;
-          inode2->ref_count=inode2->ref_count++; // new struct object created
+          inode2->ref_count=inode2->ref_count+1; // new struct object created
         }
       }
       
@@ -207,6 +208,7 @@ extern int do_regular_file_open(struct exec_context *ctx, char* filename, u64 fl
     filep->pipe = NULL;
     filep->mode = flags; // assigning mode of opening :: ERROR mode = flags - OCREAT
     filep->type = REGULAR;
+    filep->ref_count=1;
     filep->offp = 0;
     filep->fops->read = do_read_regular;
     filep->fops->write = do_write_regular;
@@ -223,7 +225,24 @@ int fd_dup(struct exec_context *current, int oldfd)
       *  return the file descriptor,
       *  Incase of Error return valid Error code 
       * */
-    int ret_fd = -EINVAL; 
+     struct file * filep = current->files[oldfd];
+     int ret_fd; 
+     if(filep){
+        // s2: find free fd
+        int i=3; // looking from index 3
+        while(current->files[i]){
+          i++;
+          //printf("looking for free fd, ind is %d\n", i);
+        }
+        //printf("free fd found: %d\n", i);
+        int fd=i;
+        filep->ref_count++;
+        current->files[fd] = filep;
+        ret_fd=fd;
+     }else{
+       // oldfd does not exist
+       ret_fd=-EINVAL;
+     }
     return ret_fd;
 }
 
