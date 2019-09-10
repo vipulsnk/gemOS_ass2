@@ -205,8 +205,8 @@ extern int do_regular_file_open(struct exec_context *ctx, char* filename, u64 fl
     // assuming no error
     // s4: filling the fields
     filep->pipe = NULL;
+    filep->mode = flags; // assigning mode of opening :: ERROR mode = flags - OCREAT
     filep->type = REGULAR;
-    filep->mode = mode;
     filep->offp = 0;
     filep->fops->read = do_read_regular;
     filep->fops->write = do_write_regular;
