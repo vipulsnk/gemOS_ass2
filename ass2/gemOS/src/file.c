@@ -154,9 +154,9 @@ extern int do_regular_file_open(struct exec_context *ctx, char* filename, u64 fl
     int i=3; // looking from index 3
     while(ctx->files[i]){
       i++;
-      printf("looking for free fd, ind is %d\n", i);
+      //printf("looking for free fd, ind is %d\n", i);
     }
-    printf("free fd found: %d\n", i);
+    //printf("free fd found: %d\n", i);
     int fd=i;
 
 
@@ -165,30 +165,38 @@ extern int do_regular_file_open(struct exec_context *ctx, char* filename, u64 fl
 
     if((flags & O_CREAT) == O_CREAT){
       // create a new file
-      printf("creating a new file\n");
+      //printf("creating a new file\n");
       // s1: get inode
       struct inode * inode1 = create_inode(filename, mode);
       filep->inode = inode1;
     }else{
       // open an existing file
       // s1: look for the inode
-      printf("opening an existing file\n");
+      //printf("opening an existing file\n");
       struct inode* inode2 = lookup_inode(filename);
       if(inode2==NULL){
         // error occured
-        printf("error occured in opening file, inode is NULL\n");
+        //printf("error occured in opening file, inode is NULL\n");
         return -EINVAL; // return appropriate exit code 
       }else{
         // assuming no error
         u32 mode_inode;
         mode_inode = inode2->mode; // may be an error if mode is not assigned in inode
         // checking permissions
+        if ((((mode & O_READ) == O_READ) && ((mode_inode & O_READ) != O_READ)) || (((mode & O_WRITE) == O_WRITE) && ((mode_inode & O_WRITE) != O_WRITE)) || (((mode & O_EXEC) == O_EXEC) && ((mode_inode & O_EXEC) != O_EXEC) )) {
+          // permission denied
+          return -EACCES;
+        }else{
+          //printf("correct permissions, good to go\n");
+          filep->inode = inode2;
+          inode2->ref_count=inode2->ref_count++; // new struct object created
+        }
         if(((mode & O_READ) == (mode_inode & O_READ)) && ((mode & O_WRITE) == (mode_inode & O_WRITE)) && ((mode & O_EXEC) == (mode_inode & O_EXEC))){
-          printf("correct permissions, good to go\n");
+          //printf("correct permissions, good to go\n");
           filep->inode = inode2;
           inode2->ref_count=inode2->ref_count++; // new struct object created
         }else{
-          printf("permissions different\n");
+          //printf("permissions different\n");
           return -EACCES;
         }
       }
