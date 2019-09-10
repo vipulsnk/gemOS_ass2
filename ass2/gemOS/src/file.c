@@ -111,10 +111,14 @@ static int do_read_regular(struct file *filep, char * buff, u32 count)
 {
    /** TODO Implementation of File Read, 
     *  You should be reading the content from File using file system read function call and fill the buf
-    *  Validate the permission, file existence, Max length etc
-    *  Incase of Error return valid Error code 
+    *  Validate the permission, file existence, Max length etc  HOW??????
+    *  Incase of Error return valid Error code HOW????????
     * */
-    int ret_fd = -EINVAL; 
+    struct inode * inode1 = filep->inode;
+    u32 ofst = filep->offp;
+    int bytread = flat_read(inode1, buff, count, &ofst);
+    filep->offp=bytread+filep->offp;
+    int ret_fd = bytread; 
     return ret_fd;
 }
 
@@ -126,7 +130,11 @@ static int do_write_regular(struct file *filep, char * buff, u32 count)
     *   Validate the permission, file existence, Max length etc
     *   Incase of Error return valid Error code 
     * */
-    int ret_fd = -EINVAL; 
+    struct inode * inode1 = filep->inode;
+    u32 ofst = filep->offp;
+    int bytwrite = flat_write(inode1, buff, count, &ofst);
+    filep->offp = filep->offp + bytwrite;
+    int ret_fd = bytwrite; 
     return ret_fd;
 }
 
@@ -183,21 +191,13 @@ extern int do_regular_file_open(struct exec_context *ctx, char* filename, u64 fl
         u32 mode_inode;
         mode_inode = inode2->mode; // may be an error if mode is not assigned in inode
         // checking permissions
-        if ((((mode & O_READ) == O_READ) && ((mode_inode & O_READ) != O_READ)) || (((mode & O_WRITE) == O_WRITE) && ((mode_inode & O_WRITE) != O_WRITE)) || (((mode & O_EXEC) == O_EXEC) && ((mode_inode & O_EXEC) != O_EXEC) )) {
+        if ((((flags & O_READ) == O_READ) && ((mode_inode & O_READ) != O_READ)) || (((flags & O_WRITE) == O_WRITE) && ((mode_inode & O_WRITE) != O_WRITE)) || (((flags & O_EXEC) == O_EXEC) && ((mode_inode & O_EXEC) != O_EXEC) )) {
           // permission denied
           return -EACCES;
         }else{
           //printf("correct permissions, good to go\n");
           filep->inode = inode2;
           inode2->ref_count=inode2->ref_count++; // new struct object created
-        }
-        if(((mode & O_READ) == (mode_inode & O_READ)) && ((mode & O_WRITE) == (mode_inode & O_WRITE)) && ((mode & O_EXEC) == (mode_inode & O_EXEC))){
-          //printf("correct permissions, good to go\n");
-          filep->inode = inode2;
-          inode2->ref_count=inode2->ref_count++; // new struct object created
-        }else{
-          //printf("permissions different\n");
-          return -EACCES;
         }
       }
       
@@ -207,6 +207,7 @@ extern int do_regular_file_open(struct exec_context *ctx, char* filename, u64 fl
     filep->pipe = NULL;
     filep->type = REGULAR;
     filep->mode = mode;
+    filep->offp = 0;
     filep->fops->read = do_read_regular;
     filep->fops->write = do_write_regular;
     filep->fops->close = generic_close;
