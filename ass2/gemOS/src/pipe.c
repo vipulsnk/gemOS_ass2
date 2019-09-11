@@ -36,6 +36,7 @@ int pipe_read(struct file *filep, char *buff, u32 count)
     *  Validate size of buff, the mode of pipe (pipe_info->mode),etc
     *  Incase of Error return valid Error code 
     */
+    /*
     if(!filep){
         return -EINVAL;
     }
@@ -55,6 +56,28 @@ int pipe_read(struct file *filep, char *buff, u32 count)
     filep->pipe->read_pos=s_rd; // start reading from this position next time
     int ret_fd = -EINVAL; 
     return s_rd;
+    */
+
+   // cyclic implementation
+    if(!filep){
+        return -EINVAL;
+    }
+    int i=0;
+    while(i<count){
+        if(filep->pipe->buffer_offset == 0){
+            return -EINVAL; // memory empty, nothing to read
+        }else{
+            if(filep->pipe->read_pos == 4096){ // exceed => cyclicity introduced
+                filep->pipe->read_pos = 0;
+            }
+            //common updation in both cases
+            buff[i] = filep->pipe->pipe_buff[filep->pipe->read_pos];
+            i++;
+            filep->pipe->buffer_offset--;
+            filep->pipe->read_pos++;
+        }
+    }
+    return filep->pipe->read_pos; // for checking
 }
 
 
@@ -66,6 +89,7 @@ int pipe_write(struct file *filep, char *buff, u32 count)
     *  Validate size of buff, the mode of pipe (pipe_info->mode),etc
     *  Incase of Error return valid Error code 
     */
+   /*
     if(!filep){
             return -EINVAL;
         }
@@ -84,6 +108,33 @@ int pipe_write(struct file *filep, char *buff, u32 count)
     filep->pipe->write_pos=s_wr; // start writing next time from this place
     int ret_fd = -EINVAL; 
     return s_wr;
+    */
+   // cyclic implementation
+
+    if(!filep){
+        return -EINVAL;
+    }
+    int i=0;
+    while(i<count){
+        if(filep->pipe->buffer_offset == 4096){
+            return -EINVAL; // memory full
+        }else{
+        //    if(filep->pipe->write_pos >= filep->pipe->read_pos){ // normal seqeunce
+        //         if(filep->pipe->write_pos == 4096){ // exceed => cyclicity introduced
+        //             filep->pipe->write_pos = 0;
+        //         }
+        //    }
+            if(filep->pipe->write_pos == 4096){ // exceed => cyclicity introduced
+                filep->pipe->write_pos = 0;
+            }
+            //common updation in both cases
+            filep->pipe->pipe_buff[filep->pipe->write_pos] = buff[i];
+            i++;
+            filep->pipe->buffer_offset++;
+            filep->pipe->write_pos++;
+        }
+    }
+   return filep->pipe->write_pos; // for checking
 }
 // one pipe => one file structure and one pipe_ifo structure
 int create_pipe(struct exec_context *current, int *fd)
