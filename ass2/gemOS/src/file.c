@@ -113,6 +113,13 @@ long generic_close(struct file *filep)
         filep->ref_count--;
         
       }
+    }else if(filep->type == PIPE){
+      // pipe 
+      if(filep->ref_count==1){ //this is the only file pointer, structure must be freed
+        free_file_object(filep);
+      }else{  // some other file pointers point to the same file structure
+        filep->ref_count--;
+      }
     }
     int ret_fd = -EINVAL; 
     return 1;

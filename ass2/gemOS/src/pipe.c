@@ -11,7 +11,7 @@ struct pipe_info* alloc_pipe_info()
 {
     struct pipe_info *pipe = (struct pipe_info*)os_page_alloc(OS_DS_REG);
     char* buffer = (char*) os_page_alloc(OS_DS_REG);
-    pipe ->pipe_buff = buffer;
+    pipe->pipe_buff = buffer;
     return pipe;
 }
 
@@ -36,8 +36,25 @@ int pipe_read(struct file *filep, char *buff, u32 count)
     *  Validate size of buff, the mode of pipe (pipe_info->mode),etc
     *  Incase of Error return valid Error code 
     */
+    if(!filep){
+        return -EINVAL;
+    }
+    int i=0;
+    char * w_ptr = filep->pipe->pipe_buff;
+    int s_rd = filep->pipe->read_pos;
+    int s_wr = filep->pipe->write_pos;
+    while(i<count){
+        if(s_rd>=s_wr){
+            return -1*s_rd; // lw ahead
+        }
+        buff[i]=w_ptr[s_rd];
+        i++;
+        s_rd++;
+        filep->pipe->buffer_offset--;
+    }
+    filep->pipe->read_pos=s_rd; // start reading from this position next time
     int ret_fd = -EINVAL; 
-    return ret_fd;
+    return s_rd;
 }
 
 
@@ -45,14 +62,30 @@ int pipe_write(struct file *filep, char *buff, u32 count)
 {
     /**
     *  TODO:: Implementation of Pipe Read
-    *  Write the contect from   the buff(argument 2);  and write to buff(pipe_info -> pipe_buff)
+    *  Write the content from   the buff(argument 2);  and write to buff(pipe_info -> pipe_buff)
     *  Validate size of buff, the mode of pipe (pipe_info->mode),etc
     *  Incase of Error return valid Error code 
     */
+    if(!filep){
+            return -EINVAL;
+        }
+    int i=0;
+    char * w_ptr = filep->pipe->pipe_buff;
+    int s_wr = filep->pipe->write_pos;
+    while(i<count){
+        if(s_wr==4096){
+            return -1; // memory limit exceeded
+        }
+        w_ptr[s_wr]=buff[i];   // ensure that s_wr < 4096
+        s_wr++;
+        i++;
+        filep->pipe->buffer_offset++;
+    }
+    filep->pipe->write_pos=s_wr; // start writing next time from this place
     int ret_fd = -EINVAL; 
-    return ret_fd;
+    return s_wr;
 }
-
+// one pipe => one file structure and one pipe_ifo structure
 int create_pipe(struct exec_context *current, int *fd)
 {
     /**
@@ -62,7 +95,45 @@ int create_pipe(struct exec_context *current, int *fd)
     *  fill the valid file descriptor in *fd param
     *  Incase of Error return valid Error code 
     */
-    int ret_fd = -EINVAL; 
+
+    // s1 : find free fd
+    int i=0, fd_read, fd_write; // looking from index 0
+    while(current->files[i]){
+      i++;
+    }
+    fd_read=i;
+    i++;
+    while(current->files[i]){
+        i++;
+    }
+    fd_write=i;
+    // s2 : allocate file object to read and write end of pipe
+
+    // assuming no error
+    // s3: allocating a file object 
+    struct file * filep = alloc_file();
+    // s4: filling the fields
+    filep->inode = NULL;
+    // pipe structure
+    struct pipe_info *pipe1 = alloc_pipe_info();
+    pipe1->is_ropen=1;
+    pipe1->is_wopen=1;
+    pipe1->read_pos=0;
+    pipe1->write_pos=0;
+    pipe1->buffer_offset=0;
+    filep->pipe = pipe1;
+    // filep->mode = flags; // assigning mode of opening :: ERROR mode = flags - OCREAT
+    filep->type = PIPE;
+    filep->ref_count=2; // needed in the implementation when deleting fds
+    filep->offp = 0;
+    filep->fops->read = pipe_read;
+    filep->fops->write = pipe_write;
+    filep->fops->close = generic_close;
+    current->files[fd_read] = filep;
+    current->files[fd_write] = filep;
+    fd[0]=fd_read;
+    fd[1]=fd_write;
+    int ret_fd = 0;  // error unknown
     return ret_fd;
 }
 
