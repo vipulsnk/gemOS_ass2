@@ -22,6 +22,9 @@ void free_file_object(struct file *filep)
     }
 }
 
+
+
+
 struct file *alloc_file()
 {
   
@@ -87,14 +90,13 @@ int open_standard_IO(struct exec_context *ctx, int type)
 void do_file_fork(struct exec_context *child)
 {
    /*TODO the child fds are a copy of the parent. Adjust the refcount*/
- 
+     for(int i=0; i<MAX_OPEN_FILES; i++){  // ERROR in case of 0, 1, 2????
+       if(child->files[i]){ 
+          child->files[i]->ref_count++;
+       }
+     }
 }
 
-void do_file_exit(struct exec_context *ctx)
-{
-   /*TODO the process is exiting. Adjust the ref_count
-     of files*/
-}
 
 long generic_close(struct file *filep)
 {
@@ -111,19 +113,35 @@ long generic_close(struct file *filep)
         free_file_object(filep);
       }else{  // some other file pointers point to the same file structure
         filep->ref_count--;
-        
+        filep=NULL;
       }
     }else if(filep->type == PIPE){
       // pipe 
       if(filep->ref_count==1){ //this is the only file pointer, structure must be freed
+        free_pipe_info(filep->pipe);
         free_file_object(filep);
       }else{  // some other file pointers point to the same file structure
         filep->ref_count--;
+        filep=NULL;
       }
     }
     int ret_fd = -EINVAL; 
-    return 1;
+    return filep->ref_count; // for checking purposes
 }
+
+void do_file_exit(struct exec_context *ctx)
+{
+   /*TODO the process is exiting. Adjust the ref_count
+     of files*/
+     long l;
+     for(int i=0; i<MAX_OPEN_FILES; i++){
+       if(ctx->files[i]){ // assuming ref_count is properly adjusted in generic_close
+         l = generic_close(ctx->files[i]); //may throw errors here
+         ctx->files[i]=NULL;
+       }
+     }
+}
+
 
 static int do_read_regular(struct file *filep, char * buff, u32 count)
 {

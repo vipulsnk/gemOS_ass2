@@ -116,6 +116,9 @@ int pipe_write(struct file *filep, char *buff, u32 count)
     }
     int i=0;
     while(i<count){
+        if(buff[i]=='\0'){ // buff exhausted
+            return i;
+        }
         if(filep->pipe->buffer_offset == 4096){
             return -EINVAL; // memory full
         }else{
