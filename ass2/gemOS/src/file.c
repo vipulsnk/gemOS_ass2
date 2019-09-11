@@ -294,17 +294,15 @@ int fd_dup2(struct exec_context *current, int oldfd, int newfd)
     if(!(current->files[oldfd])){
       return -EINVAL;
     }
-    int fd;
-    int ret_fd;
-    struct file * filep = current->files[newfd];
-    if(filep){
-      long l = generic_close(filep);
-      current->files[newfd]=NULL;
-    }
     if(oldfd==newfd){
-      ret_fd=oldfd;
+      return oldfd;
     }else{
-      ret_fd = fd_dup(current, oldfd); // may also return for errors
-    }   
-    return ret_fd;
+      struct file * filep = current->files[newfd];
+      if(filep){
+        long l = generic_close(filep);
+        current->files[newfd]=NULL;
+      }
+      current->files[newfd]=current->files[oldfd];
+    } 
+    return newfd;
 }
