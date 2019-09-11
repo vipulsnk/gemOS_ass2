@@ -155,13 +155,29 @@ static long do_lseek_regular(struct file *filep, long offset, int whence)
     *   Set, Adjust the ofset based on the whence
     *   Incase of Error return valid Error code 
     * */
+   if(!filep || filep->type!=REGULAR){
+     return -EINVAL; //NULL ptr or non regular file
+   }
+   if(whence == SEEK_SET){
+     filep->offp=offset;
+   }else if(whence == SEEK_CUR){
+     filep->offp+=offset;
+   }else if(whence == SEEK_END){
+     filep->offp=filep->inode->file_size + offset;
+   }else{
+     return -EINVAL;
+   }
     // if(!filep){
     //   // no filep
     //   return -EINVAL;
     // }else{
 
     // }
-    int ret_fd = -EINVAL; 
+    if(filep->offp<0){
+      return -EINVAL;
+    }
+    int ret_fd = filep->offp; 
+    
     return ret_fd;
 }
 
@@ -233,6 +249,7 @@ extern int do_regular_file_open(struct exec_context *ctx, char* filename, u64 fl
     filep->fops->read = do_read_regular;
     filep->fops->write = do_write_regular;
     filep->fops->close = generic_close;
+    filep->fops->lseek= do_lseek_regular;
     ctx->files[fd] = filep;
     int ret_fd = fd; 
     return ret_fd;
