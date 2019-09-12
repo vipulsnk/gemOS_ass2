@@ -17,7 +17,8 @@ struct pipe_info* alloc_pipe_info()
 
 
 void free_pipe_info(struct pipe_info *p_info)
-{
+{   
+    printk("inside free_pipe_info\n");
     if(p_info)
     {
         os_page_free(OS_DS_REG ,p_info->pipe_buff);
@@ -36,38 +37,23 @@ int pipe_read(struct file *filep, char *buff, u32 count)
     *  Validate size of buff, the mode of pipe (pipe_info->mode),etc
     *  Incase of Error return valid Error code 
     */
-    /*
-    if(!filep){
-        return -EINVAL;
-    }
-    int i=0;
-    char * w_ptr = filep->pipe->pipe_buff;
-    int s_rd = filep->pipe->read_pos;
-    int s_wr = filep->pipe->write_pos;
-    while(i<count){
-        if(s_rd>=s_wr){
-            return -1*s_rd; // lw ahead
-        }
-        buff[i]=w_ptr[s_rd];
-        i++;
-        s_rd++;
-        filep->pipe->buffer_offset--;
-    }
-    filep->pipe->read_pos=s_rd; // start reading from this position next time
-    int ret_fd = -EINVAL; 
-    return s_rd;
-    */
-
    // cyclic implementation
+    printk("inside pipe_read\n");
     if(!filep){
+        printk("filep is NULL\n");
         return -EINVAL;
+    }else if(filep->mode!=O_READ){  // mode of pipe should be O_READ
+        printk("mode of pipe should be O_READ but mode is %d\n", filep->mode);
+        return -EACCES;
     }
     int i=0;
     while(i<count){
         if(filep->pipe->buffer_offset == 0){
-            return -EINVAL; // memory empty, nothing to read
+            printk("nothing to read in pipe, empty buffer\n");
+            break; // memory empty, nothing to read
         }else{
             if(filep->pipe->read_pos == 4096){ // exceed => cyclicity introduced
+                printk("index exceeding 4096\n");
                 filep->pipe->read_pos = 0;
             }
             //common updation in both cases
@@ -77,7 +63,7 @@ int pipe_read(struct file *filep, char *buff, u32 count)
             filep->pipe->read_pos++;
         }
     }
-    return filep->pipe->read_pos; // for checking
+    return i; // for checking
 }
 
 
@@ -89,44 +75,25 @@ int pipe_write(struct file *filep, char *buff, u32 count)
     *  Validate size of buff, the mode of pipe (pipe_info->mode),etc
     *  Incase of Error return valid Error code 
     */
-   /*
-    if(!filep){
-            return -EINVAL;
-        }
-    int i=0;
-    char * w_ptr = filep->pipe->pipe_buff;
-    int s_wr = filep->pipe->write_pos;
-    while(i<count){
-        if(s_wr==4096){
-            return -1; // memory limit exceeded
-        }
-        w_ptr[s_wr]=buff[i];   // ensure that s_wr < 4096
-        s_wr++;
-        i++;
-        filep->pipe->buffer_offset++;
-    }
-    filep->pipe->write_pos=s_wr; // start writing next time from this place
-    int ret_fd = -EINVAL; 
-    return s_wr;
-    */
    // cyclic implementation
-
+   printk("inside pipe_write\n");
+    //  Writing more than 4KB should return a error. 
     if(!filep){
+        printk("filep does not exist\n");
         return -EINVAL;
+    }else if(filep->mode!=O_WRITE){  // mode of pipe should be O_WRITE
+        printk("mode of pipe should be O_WRITE but mode is %d\n", filep->mode);
+        return -EACCES;
     }
     int i=0;
     while(i<count){
         if(buff[i]=='\0'){ // buff exhausted
-            return i;
+            printk("buff exhausted\n");
+            break;
         }
         if(filep->pipe->buffer_offset == 4096){
-            return -EINVAL; // memory full
+            return -EOTHERS; // memory full
         }else{
-        //    if(filep->pipe->write_pos >= filep->pipe->read_pos){ // normal seqeunce
-        //         if(filep->pipe->write_pos == 4096){ // exceed => cyclicity introduced
-        //             filep->pipe->write_pos = 0;
-        //         }
-        //    }
             if(filep->pipe->write_pos == 4096){ // exceed => cyclicity introduced
                 filep->pipe->write_pos = 0;
             }
@@ -137,7 +104,7 @@ int pipe_write(struct file *filep, char *buff, u32 count)
             filep->pipe->write_pos++;
         }
     }
-   return filep->pipe->write_pos; // for checking
+   return i; // for checking
 }
 // one pipe => one file structure and one pipe_ifo structure
 int create_pipe(struct exec_context *current, int *fd)
@@ -151,7 +118,7 @@ int create_pipe(struct exec_context *current, int *fd)
     */
 
     // s1 : find free fd
-    int i=0, fd_read, fd_write; // looking from index 0
+    int i=3, fd_read, fd_write; // looking from index 3  
     while(current->files[i]){
       i++;
     }
@@ -161,13 +128,11 @@ int create_pipe(struct exec_context *current, int *fd)
         i++;
     }
     fd_write=i;
-    // s2 : allocate file object to read and write end of pipe
-
-    // assuming no error
-    // s3: allocating a file object 
-    struct file * filep = alloc_file();
-    // s4: filling the fields
-    filep->inode = NULL;
+    if(fd_read > 32 || fd_write > 32){
+        printk("all fds are occupied\n");
+        return -EOTHERS;
+    }
+    //TODO maximum can be 32 only
     // pipe structure
     struct pipe_info *pipe1 = alloc_pipe_info();
     pipe1->is_ropen=1;
@@ -175,19 +140,48 @@ int create_pipe(struct exec_context *current, int *fd)
     pipe1->read_pos=0;
     pipe1->write_pos=0;
     pipe1->buffer_offset=0;
-    filep->pipe = pipe1;
-    // filep->mode = flags; // assigning mode of opening :: ERROR mode = flags - OCREAT
-    filep->type = PIPE;
-    filep->ref_count=2; // needed in the implementation when deleting fds
-    filep->offp = 0;
-    filep->fops->read = pipe_read;
-    filep->fops->write = pipe_write;
-    filep->fops->close = generic_close;
-    current->files[fd_read] = filep;
-    current->files[fd_write] = filep;
+
+    // s2 : allocate file object to read and write end of pipe
+    // Read file object
+    // assuming no error
+    // s3: allocating a file object 
+    struct file * filep_read = alloc_file();
+    // s4: filling the fields
+    filep_read->inode = NULL;
+    filep_read->mode = O_READ; // assigning mode of opening 
+    filep_read->type = PIPE;
+    filep_read->ref_count=1; // needed in the implementation when deleting fds
+    filep_read->offp = 0;
+    filep_read->fops->read = pipe_read;
+    filep_read->fops->write = pipe_write;
+    filep_read->fops->close = generic_close;
+    filep_read->pipe = pipe1;
+    
+
+
+    // Read file object
+    // assuming no error
+    // s3: allocating a file object 
+    struct file * filep_write = alloc_file();
+    // s4: filling the fields
+    filep_write->inode = NULL;
+    filep_write->mode = O_WRITE; // assigning mode of opening
+    filep_write->type = PIPE;
+    filep_write->ref_count=1; // needed in the implementation when deleting fds
+    filep_write->offp = 0;
+    filep_write->fops->read = pipe_read;
+    filep_write->fops->write = pipe_write;
+    filep_write->fops->close = generic_close;
+    filep_write->pipe = pipe1;
+
+    // assigning file structures
+    current->files[fd_read] = filep_read;
+    current->files[fd_write] = filep_write;
+
+    // assigning fds
     fd[0]=fd_read;
     fd[1]=fd_write;
     int ret_fd = 0;  // error unknown
-    return ret_fd;
+    return 1;
 }
 
