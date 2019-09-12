@@ -18,7 +18,7 @@ struct pipe_info* alloc_pipe_info()
 
 void free_pipe_info(struct pipe_info *p_info)
 {   
-    printk("inside free_pipe_info\n");
+    //printk("inside free_pipe_info\n");
     if(p_info)
     {
         os_page_free(OS_DS_REG ,p_info->pipe_buff);
@@ -38,22 +38,22 @@ int pipe_read(struct file *filep, char *buff, u32 count)
     *  Incase of Error return valid Error code 
     */
    // cyclic implementation
-    printk("inside pipe_read\n");
+    //printk("inside pipe_read\n");
     if(!filep){
-        printk("filep is NULL\n");
+        //printk("filep is NULL\n");
         return -EINVAL;
     }else if(filep->mode!=O_READ){  // mode of pipe should be O_READ
-        printk("mode of pipe should be O_READ but mode is %d\n", filep->mode);
+        //printk("mode of pipe should be O_READ but mode is %d\n", filep->mode);
         return -EACCES;
     }
     int i=0;
     while(i<count){
         if(filep->pipe->buffer_offset == 0){
-            printk("nothing to read in pipe, empty buffer\n");
+            //printk("nothing to read in pipe, empty buffer\n");
             break; // memory empty, nothing to read
         }else{
             if(filep->pipe->read_pos == 4096){ // exceed => cyclicity introduced
-                printk("index exceeding 4096\n");
+                //printk("index exceeding 4096\n");
                 filep->pipe->read_pos = 0;
             }
             //common updation in both cases
@@ -76,19 +76,19 @@ int pipe_write(struct file *filep, char *buff, u32 count)
     *  Incase of Error return valid Error code 
     */
    // cyclic implementation
-   printk("inside pipe_write\n");
+   //printk("inside pipe_write\n");
     //  Writing more than 4KB should return a error. 
     if(!filep){
-        printk("filep does not exist\n");
+        //printk("filep does not exist\n");
         return -EINVAL;
     }else if(filep->mode!=O_WRITE){  // mode of pipe should be O_WRITE
-        printk("mode of pipe should be O_WRITE but mode is %d\n", filep->mode);
+        //printk("mode of pipe should be O_WRITE but mode is %d\n", filep->mode);
         return -EACCES;
     }
     int i=0;
     while(i<count){
         if(buff[i]=='\0'){ // buff exhausted
-            printk("buff exhausted\n");
+            //printk("buff exhausted\n");
             break;
         }
         if(filep->pipe->buffer_offset == 4096){
@@ -129,23 +129,37 @@ int create_pipe(struct exec_context *current, int *fd)
     }
     fd_write=i;
     if(fd_read > 32 || fd_write > 32){
-        printk("all fds are occupied\n");
+        //printk("all fds are occupied\n");
         return -EOTHERS;
     }
     //TODO maximum can be 32 only
     // pipe structure
     struct pipe_info *pipe1 = alloc_pipe_info();
+    if(!pipe1){
+        return -ENOMEM;
+    }
+    // s2 : allocate file object to read and write end of pipe
+    // Read file object
+    // assuming no error
+    // s3: allocating a file object 
+    struct file * filep_read = alloc_file();
+    if(!filep_read){
+        return -ENOMEM;
+    }
+     // Read file object
+    // assuming no error
+    // s3: allocating a file object 
+    struct file * filep_write = alloc_file();
+    if(!filep_write){
+        return -ENOMEM;
+    }
     pipe1->is_ropen=1;
     pipe1->is_wopen=1;
     pipe1->read_pos=0;
     pipe1->write_pos=0;
     pipe1->buffer_offset=0;
 
-    // s2 : allocate file object to read and write end of pipe
-    // Read file object
-    // assuming no error
-    // s3: allocating a file object 
-    struct file * filep_read = alloc_file();
+    
     // s4: filling the fields
     filep_read->inode = NULL;
     filep_read->mode = O_READ; // assigning mode of opening 
@@ -159,10 +173,7 @@ int create_pipe(struct exec_context *current, int *fd)
     
 
 
-    // Read file object
-    // assuming no error
-    // s3: allocating a file object 
-    struct file * filep_write = alloc_file();
+   
     // s4: filling the fields
     filep_write->inode = NULL;
     filep_write->mode = O_WRITE; // assigning mode of opening

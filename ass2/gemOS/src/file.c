@@ -15,7 +15,7 @@
 /************************************************************************************/
 void free_file_object(struct file *filep)
 {
-  printk("inside free_file_object: freeing file struct object\n");
+  //printk("inside free_file_object: freeing file struct object\n");
     if(filep)
     {
        os_page_free(OS_DS_REG ,filep);
@@ -89,10 +89,10 @@ int open_standard_IO(struct exec_context *ctx, int type)
 void do_file_fork(struct exec_context *child)
 {
    /*TODO the child fds are a copy of the parent. Adjust the refcount*/
-   printk("inside do_file_fork\n");
+   //printk("inside do_file_fork\n");
      for(int i=0; i<MAX_OPEN_FILES; i++){  // ERROR in case of 0, 1, 2????
        if(child->files[i]){ 
-          printk("file des %d is open, with ref_count: %d, increasing it by 1\n", i, child->files[i]->ref_count);
+          //printk("file des %d is open, with ref_count: %d, increasing it by 1\n", i, child->files[i]->ref_count);
           child->files[i]->ref_count++;
        }
      }
@@ -107,62 +107,62 @@ long generic_close(struct file *filep)
    * 
    */
   if(!filep){
-    printk("pointer does not exist\n");
+    //printk("pointer does not exist\n");
     return -EINVAL;
   }
-  printk("inside generic_close\n");
+  //printk("inside generic_close\n");
   int l;
     if(filep->type == REGULAR){
-      printk("regular file type\n");
+      //printk("regular file type\n");
       // regular file
       if(filep->ref_count==1){ //this is the only file pointer, structure must be freed
-        printk("ref_count is 1, freeing file object\n");
+        //printk("ref_count is 1, freeing file object\n");
         filep->inode->ref_count--;   // one structure decreased
         free_file_object(filep);
         filep=NULL;
       }else{  // some other file pointers point to the same file structure
-        printk("ref_count is %d, decreasing it by 1\n", filep->ref_count);
+        //printk("ref_count is %d, decreasing it by 1\n", filep->ref_count);
         filep->ref_count--;
         filep=NULL;
       }
     }else if(filep->type == PIPE){
       // pipe 
-      printk("pipe file type\n");
+      //printk("pipe file type\n");
       if(filep->ref_count==1){ //this is the only file pointer, structure must be freed
-        printk("filep->ref_count is 1\n");
+        //printk("filep->ref_count is 1\n");
         if(filep->mode==O_READ){
-          printk("mode is O_READ, updating is_ropen to 0\n");
+          //printk("mode is O_READ, updating is_ropen to 0\n");
           filep->pipe->is_ropen=0;
           if(!(filep->pipe->is_wopen)){ // if write end is already closed then free pipe
-            printk("wopen is 0, freeing pipe object\n");
+            //printk("wopen is 0, freeing pipe object\n");
             free_pipe_info(filep->pipe);
           }
         }else if(filep->mode==O_WRITE){
-          printk("mode is O_WRITE, updating it to 0\n");
+          //printk("mode is O_WRITE, updating it to 0\n");
           filep->pipe->is_wopen=0;
           if(!(filep->pipe->is_ropen)){ // if read end is already closed then free pipe
-            printk("wopen is 0, freeing pipe object\n");
+            //printk("wopen is 0, freeing pipe object\n");
             free_pipe_info(filep->pipe);
           }
         }else{      // should not happen, if happens, initialising error or mode changed
-          printk("should not happen, if happens, initialising error or mode changed\n");
+          //printk("should not happen, if happens, initialising error or mode changed\n");
           return -EINVAL;
         }
-        printk("freeing file structure\n");
+        //printk("freeing file structure\n");
         free_file_object(filep);  // this is last pointer to either read or write end of pipe
         filep=NULL;
       }else{  // some other file pointers point to the same file structure
-        printk("ref_count is %d, decreasing it by 1\n", filep->ref_count);
+        //printk("ref_count is %d, decreasing it by 1\n", filep->ref_count);
         filep->ref_count--;
         filep=NULL;
       }
     }else{
-      printk("closing std fds\n");
+      //printk("closing std fds\n");
       if(filep->ref_count==1){
-        printk("last pointer to file struct\n");
+        //printk("last pointer to file struct\n");
         free_file_object(filep);
       }else{
-        printk("some other pointers\n");
+        //printk("some other pointers\n");
         filep->ref_count--;
       }
       filep=NULL;
@@ -175,11 +175,11 @@ void do_file_exit(struct exec_context *ctx)
 {
    /*TODO the process is exiting. Adjust the ref_count
      of files*/
-     printk("inside do_file_exit\n");
+     //printk("inside do_file_exit\n");
      long l;
      for(int i=0; i<MAX_OPEN_FILES; i++){
        if(ctx->files[i]){ // assuming ref_count is properly adjusted in generic_close
-         printk("file des %d is open, with ref_count: %d, calling generic_close\n", i, ctx->files[i]->ref_count);
+         //printk("file des %d is open, with ref_count: %d, calling generic_close\n", i, ctx->files[i]->ref_count);
          l = generic_close(ctx->files[i]); //may throw errors here
          ctx->files[i]=NULL;
        }
@@ -194,17 +194,20 @@ static int do_read_regular(struct file *filep, char * buff, u32 count)
     *  Validate the permission, file existence, Max length etc  HOW??????
     *  Incase of Error return valid Error code HOW????????
     * */
-    printk("inside do_read_regular\n");
+    //printk("inside do_read_regular\n");
+    if(!filep){
+      return -EINVAL;
+    }
     if(filep->inode->mode & O_READ != O_READ){
-      printk("file not created in read mode\n");
-      return -EINVAL;
+      //printk("file not created in read mode\n");
+      return -EACCES;
     }else if(filep->mode & O_READ != O_READ){
-      printk("file not opened with reading mode\n");
-      return -EINVAL;
+      //printk("file not opened with reading mode\n");
+      return -EACCES;
     }
     u32 ofst = filep->offp;
     int bytread = flat_read(filep->inode, buff, count, &ofst); // what if count is more than length of buff
-    printk("bytread is %d, filep->offp before is %d, after is %d\n", bytread, filep->offp, filep->offp + bytread);
+    //printk("bytread is %d, filep->offp before is %d, after is %d\n", bytread, filep->offp, filep->offp + bytread);
     filep->offp=bytread+filep->offp;
     int ret_fd = bytread; 
     return ret_fd;
@@ -218,18 +221,21 @@ static int do_write_regular(struct file *filep, char * buff, u32 count)
     *   Validate the permission, file existence, Max length etc
     *   Incase of Error return valid Error code 
     * */
-    printk("inside do_write_regular\n");
+    //printk("inside do_write_regular\n");
+    if(!filep){
+      return -EINVAL;
+    }
     if(filep->inode->mode & O_WRITE != O_WRITE){
-      printk("file not created in read mode\n");
-      return -EINVAL;
+      //printk("file not created in read mode\n");
+      return -EACCES;
     }else if(filep->mode & O_WRITE != O_WRITE){
-      printk("file not opened with reading mode\n");
-      return -EINVAL;
+      //printk("file not opened with reading mode\n");
+      return -EACCES;
     }
     struct inode * inode1 = filep->inode;
     u32 ofst = filep->offp;
     int bytwrite = flat_write(inode1, buff, count, &ofst);
-    printk("bytwrite is %d, filep->offp before is %d, after is %d\n", bytwrite, filep->offp, filep->offp + bytwrite);
+    //printk("bytwrite is %d, filep->offp before is %d, after is %d\n", bytwrite, filep->offp, filep->offp + bytwrite);
     filep->offp = filep->offp + bytwrite;
     int ret_fd = bytwrite; 
     return ret_fd;
@@ -242,34 +248,34 @@ static long do_lseek_regular(struct file *filep, long offset, int whence)
     *   Incase of Error return valid Error code 
     * */
 
-   printk("inside do_lseek_regular\n");
+   //printk("inside do_lseek_regular\n");
    // throw error if offset becomes greater than File end means Max_File_Size (4KB).
    if(!filep || filep->type!=REGULAR){
-     printk("file is irreg or filep is NULL\n");
+     //printk("file is irreg or filep is NULL\n");
      return -EINVAL; //NULL ptr or non regular file
-   }else if(filep->inode->e_pos < offset){
-     printk("offset is more than max file size\n");
-     return -EINVAL;
+   }else if((filep->inode->e_pos - filep->inode->s_pos) < offset){
+     //printk("offset is more than max file size\n");
+     return -EOTHERS;
    }
    if(whence == SEEK_SET){
-     printk("SEEK_SET\n");
+     //printk("SEEK_SET\n");
      filep->offp=offset;
    }else if(whence == SEEK_CUR){
-     printk("SEEK_CUR\n");
-     if(filep->inode->e_pos < offset + filep->offp){
-      printk("offset + filep->offp is more than max file size\n");
-      return -EINVAL;
+     //printk("SEEK_CUR\n");
+     if((filep->inode->e_pos - filep->inode->s_pos) < (offset + filep->offp)){
+      //printk("offset + filep->offp is more than max file size\n");
+      return -EOTHERS;
     }
      filep->offp+=offset;
    }else if(whence == SEEK_END){
-     printk("SEEK_END\n");
+     //printk("SEEK_END\n");
      filep->offp=filep->inode->file_size + offset;
    }else{
-     printk("some other seek operation, should not happpen\n");
+     //printk("some other seek operation, should not happpen\n");
      return -EINVAL;
    }
     if(filep->offp<0){
-      printk("overflow occured\n");
+      //printk("overflow occured\n");
       return -EINVAL;
     }
     int ret_fd = filep->offp; 
@@ -294,7 +300,7 @@ extern int do_regular_file_open(struct exec_context *ctx, char* filename, u64 fl
       //printf("looking for free fd, ind is %d\n", i);
     }
     if(i>MAX_OPEN_FILES){
-      printk("all fds are occupied\n");
+      //printk("all fds are occupied\n");
       return -EOTHERS;
     }
     //printf("free fd found: %d\n", i);
@@ -305,26 +311,34 @@ extern int do_regular_file_open(struct exec_context *ctx, char* filename, u64 fl
     
     struct inode * inode1;
     if((flags & O_CREAT) == O_CREAT){
-      printk("creating new file inode\n");
+      //printk("creating new file inode\n");
       // create a new file
       //printf("creating a new file\n");
       // s1: get inode
       if(lookup_inode(filename)){ // file with same name already exist
         // error occured
-        printk("error occured in opening file, inode already exist\n");
+        //printk("error occured in opening file, inode already exist\n");
         return -EINVAL; // return appropriate exit code 
       }
+      // if ((((flags & O_READ) == O_READ) && ((mode & O_READ) != O_READ)) || (((flags & O_WRITE) == O_WRITE) && ((mode & O_WRITE) != O_WRITE)) || (((flags & O_EXEC) == O_EXEC) && ((mode & O_EXEC) != O_EXEC) )) {
+      //     // permission denied
+      //     //printk("permission denied\n");
+      //     return -EACCES;
+      //   }
       inode1 = create_inode(filename, mode);
+      if(!inode1){
+        return -ENOMEM;
+      }
       inode1->ref_count=1;
       
     }else{
       // open an existing file
       // s1: look for the inode
-      printk("opening an existing file\n");
+      //printk("opening an existing file\n");
       inode1 = lookup_inode(filename);
       if(inode1==NULL){
         // error occured
-        printk("error occured in opening file, inode is NULL\n");
+        //printk("error occured in opening file, inode is NULL\n");
         return -EINVAL; // return appropriate exit code 
       }else{
         // assuming no error
@@ -333,20 +347,23 @@ extern int do_regular_file_open(struct exec_context *ctx, char* filename, u64 fl
         // checking permissions
         if ((((flags & O_READ) == O_READ) && ((mode_inode & O_READ) != O_READ)) || (((flags & O_WRITE) == O_WRITE) && ((mode_inode & O_WRITE) != O_WRITE)) || (((flags & O_EXEC) == O_EXEC) && ((mode_inode & O_EXEC) != O_EXEC) )) {
           // permission denied
-          printk("permission denied\n");
+          //printk("permission denied\n");
           return -EACCES;
         }else{
-          printk("correct permissions, good to go\n");
+          //printk("correct permissions, good to go\n");
           // filep->inode = inode2;
           inode1->ref_count++; // new struct object created
         }
       }
       
     }
-    printk("creating a new file object\n");
+    //printk("creating a new file object\n");
     // assuming no error
     // s3: allocating a file object 
     struct file * filep = alloc_file();
+    if(!filep){
+      return -ENOMEM;
+    }
     // s4: filling the fields
     filep->inode = inode1;
     filep->pipe = NULL;
@@ -370,7 +387,7 @@ int fd_dup(struct exec_context *current, int oldfd)
       *  return the file descriptor,
       *  Incase of Error return valid Error code 
       * */
-     printk("inside fd_dup\n");
+     //printk("inside fd_dup\n");
      struct file * filep = current->files[oldfd];
      int ret_fd; 
      if(filep){
@@ -381,17 +398,17 @@ int fd_dup(struct exec_context *current, int oldfd)
           //printf("looking for free fd, ind is %d\n", i);
         }
         if(i>MAX_OPEN_FILES){
-          printk("free fd found: %d\n", i);
+          //printk("free fd found: %d\n", i);
           return -EOTHERS;
         }
-        printk("free fd found: %d\n", i);
+        //printk("free fd found: %d\n", i);
         int fd=i;
         filep->ref_count++;
         current->files[fd] = filep;
         ret_fd=fd;
      }else{
        // oldfd does not exist
-       printk("oldfd does not exist\n");
+       //printk("oldfd does not exist\n");
        ret_fd=-EINVAL;
      }
     return ret_fd;
@@ -405,9 +422,9 @@ int fd_dup2(struct exec_context *current, int oldfd, int newfd)
     *  return the file descriptor,
     *  Incase of Error return valid Error code 
     * */
-   printk("inside fd_dup2\n");
+   //printk("inside fd_dup2\n");
     if(!(current->files[oldfd])){
-      printk("oldfd does not exist\n");
+      //printk("oldfd does not exist\n");
       return -EINVAL;
     }
     if(oldfd==newfd){
